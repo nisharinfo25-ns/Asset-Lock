@@ -16,8 +16,13 @@ client.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Vercel deployment protection bypass (optional)
+  if (import.meta.env.VITE_VERCEL_BYPASS) {
+    config.headers['x-vercel-protection-bypass'] = import.meta.env.VITE_VERCEL_BYPASS;
+  }
   return config;
 });
+
 
 client.interceptors.response.use(
   (response) => response,

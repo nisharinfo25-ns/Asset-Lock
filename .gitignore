@@ -39,3 +39,4 @@ cache/
 # Local database uploads
 database/ipfs_store/*
 !database/ipfs_store/.gitkeep
+.vercel
