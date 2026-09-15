@@ -6,27 +6,29 @@ const os = require('os');
 
 class JsonDb {
   constructor() {
-    this.bundledFile = path.join(__dirname, '../../database/db.json');
+    // Path to the DB file that ships with the repo (relative to project root)
+    this.bundledFile = path.resolve(process.cwd(), 'database', 'db.json');
+    // In a Vercel serverless environment we must write to a writable dir
     this.file = process.env.VERCEL
       ? path.join(os.tmpdir(), 'assetlock_db.json')
       : this.bundledFile;
     this.data = this._load();
   }
+
   _load() {
-    // Try writable file first
+    // 1️⃣ Try the writable tmp file (used after the first successful write)
     if (fs.existsSync(this.file)) {
-      try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (err) {}
+      try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (_) {}
     }
-    // Fall back to bundled initial db.json if available
-    if (this.bundledFile !== this.file && fs.existsSync(this.bundledFile)) {
-      try {
-        const initial = JSON.parse(fs.readFileSync(this.bundledFile, 'utf8'));
-        this.save();
-        return initial;
-      } catch (err) {}
+    // 2️⃣ Fallback to the bundled file that lives in the repo root.
+    //    process.cwd() points at the project root even in a Vercel function.
+    if (fs.existsSync(this.bundledFile)) {
+      try { return JSON.parse(fs.readFileSync(this.bundledFile, 'utf8')); } catch (_) {}
     }
+    // 3️⃣ As a last resort start with empty collections – the app will create the tmp file on first write.
     return { users: [], assets: [], permissions: [], auditLogs: [] };
   }
+
   save() {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
@@ -35,6 +37,7 @@ class JsonDb {
       // Keep in memory if filesystem cannot be written
     }
   }
+
   col(name) {
     if (!this.data[name]) this.data[name] = [];
     const col = this.data[name];
