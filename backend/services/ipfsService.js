@@ -2,8 +2,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 
-const LOCAL_STORE = path.join(__dirname, '../../database/ipfs_store');
+const LOCAL_STORE = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'ipfs_store')
+  : path.join(__dirname, '../../database/ipfs_store');
 
 function toBase58(hex) {
   const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';

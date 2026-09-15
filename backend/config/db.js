@@ -2,20 +2,38 @@
 const fs = require('fs');
 const path = require('path');
 
+const os = require('os');
+
 class JsonDb {
   constructor() {
-    this.file = path.join(__dirname, '../../database/db.json');
+    this.bundledFile = path.join(__dirname, '../../database/db.json');
+    this.file = process.env.VERCEL
+      ? path.join(os.tmpdir(), 'assetlock_db.json')
+      : this.bundledFile;
     this.data = this._load();
   }
   _load() {
+    // Try writable file first
     if (fs.existsSync(this.file)) {
       try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (err) {}
+    }
+    // Fall back to bundled initial db.json if available
+    if (this.bundledFile !== this.file && fs.existsSync(this.bundledFile)) {
+      try {
+        const initial = JSON.parse(fs.readFileSync(this.bundledFile, 'utf8'));
+        this.save();
+        return initial;
+      } catch (err) {}
     }
     return { users: [], assets: [], permissions: [], auditLogs: [] };
   }
   save() {
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+    try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+    } catch (err) {
+      // Keep in memory if filesystem cannot be written
+    }
   }
   col(name) {
     if (!this.data[name]) this.data[name] = [];

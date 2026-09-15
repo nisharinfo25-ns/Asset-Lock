@@ -4,7 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const SIM_FILE = path.join(__dirname, '../../database/blockchain_sim.json');
+const os = require('os');
+
+const SIM_FILE = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'blockchain_sim.json')
+  : path.join(__dirname, '../../database/blockchain_sim.json');
 const ABI_PATH = path.join(__dirname, '../../blockchain/artifacts/AssetAccessControl.json');
 
 class BlockchainService {
@@ -25,8 +29,12 @@ class BlockchainService {
   }
 
   _saveSim() {
-    fs.mkdirSync(path.dirname(SIM_FILE), { recursive: true });
-    fs.writeFileSync(SIM_FILE, JSON.stringify(this.sim, null, 2));
+    try {
+      fs.mkdirSync(path.dirname(SIM_FILE), { recursive: true });
+      fs.writeFileSync(SIM_FILE, JSON.stringify(this.sim, null, 2));
+    } catch (err) {
+      // In-memory fallback
+    }
   }
 
   async _init() {
