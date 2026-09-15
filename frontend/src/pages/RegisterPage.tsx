@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Lock, Mail, User as UserIcon, Wallet, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';

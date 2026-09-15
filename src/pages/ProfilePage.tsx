@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { UserCircle, Shield, Wallet, Key, CheckCircle, Mail, Clock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { formatDate } from '../utils/crypto';

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BlockchainStatus, IpfsStatus } from '../types';
 import { api } from '../services/api';
 

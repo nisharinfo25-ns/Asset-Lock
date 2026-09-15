@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const router = require('express').Router();
 const blockchain = require('../config/blockchain');
 const IPFSService = require('../services/ipfsService');

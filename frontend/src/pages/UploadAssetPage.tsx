@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud, File, Shield, Lock, Database, Cpu, CheckCircle2, ArrowRight } from 'lucide-react';
 import { api } from '../services/api';

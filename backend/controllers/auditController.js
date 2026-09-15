@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const AuditLog = require('../models/AuditLog');
 
 exports.getAuditLogs = (req, res) => {

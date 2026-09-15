@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FolderLock, ExternalLink, CheckCheck, UploadCloud, Shield, Search } from 'lucide-react';
 import { api } from '../services/api';

@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const multer = require('multer');
 const crypto = require('crypto');
 const CryptoService = require('../services/cryptoService');

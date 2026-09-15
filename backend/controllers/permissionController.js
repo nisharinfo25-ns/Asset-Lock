@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const blockchain = require('../config/blockchain');
 const PermissionModel = require('../models/Permission');
 const AssetModel = require('../models/Asset');

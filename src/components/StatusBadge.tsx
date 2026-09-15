@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Shield, ShieldAlert, CheckCircle, XCircle, HardDrive, Link } from 'lucide-react';
 
 interface StatusBadgeProps {

@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const db = require('../config/db');
 const users = () => db.col('users');
 module.exports = {

@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const CryptoService = require('../services/cryptoService');
 const IPFSService = require('../services/ipfsService');
 const blockchain = require('../config/blockchain');
