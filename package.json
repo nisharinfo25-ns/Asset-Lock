@@ -1,14 +1,31 @@
-﻿{
-  "name": "asset-lock-workspace",
+{
+  "name": "asset-lock",
   "version": "1.0.0",
-  "description": "Blockchain Based Decentralised Identity & Access Control for Secure Digital Asset Management",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix frontend run dev",
-    "backend": "npm --prefix backend run backend",
-    "build:frontend": "npm --prefix frontend run build",
-    "compile:contract": "npm --prefix blockchain run compile",
-    "test:backend": "npm --prefix backend test",
-    "test": "npm --prefix backend test"
+    "dev": "node backend/src/index.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "node backend/src/index.js",
+    "test": "node test/backend.test.js",
+    "contract:compile": "cd blockchain && npx hardhat compile",
+    "contract:test": "cd blockchain && npx hardhat test",
+    "contract:deploy": "cd blockchain && npx hardhat run scripts/deploy.js --network localhost"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.1",
+    "axios": "^1.20.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^18.0.3",
+    "ethers": "^6.17.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.7.0",
+    "form-data": "^4.0.6",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0"
   }
 }

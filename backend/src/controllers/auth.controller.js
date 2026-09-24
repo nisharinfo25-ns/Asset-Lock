@@ -1,9 +1,11 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { supabase } = require('../config/supabase');
+const { db } = require('../services/dbStore.service');
 const { sendSuccess, sendError } = require('../utils/response');
 const { validateEmail, validatePassword } = require('../utils/validators');
 const { createAuditLog } = require('../services/audit.service');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'asset_lock_default_jwt_secret_key_32bytes_security_fallback';
 
 const register = async (req, res) => {
   try {
@@ -24,12 +26,7 @@ const register = async (req, res) => {
     }
 
     // Check duplicate
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email.toLowerCase())
-      .single();
-
+    const existing = await db.users.findByEmail(email);
     if (existing) {
       return sendError(res, 409, 'An account with this email already exists');
     }
@@ -38,36 +35,32 @@ const register = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Create user
-    const { data: user, error } = await supabase
-      .from('users')
-      .insert({
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        password_hash: passwordHash,
-        wallet_address: walletAddress || null,
-        role: 'owner'
-      })
-      .select('id, name, email, role, wallet_address, created_at')
-      .single();
+    const user = await db.users.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password_hash: passwordHash,
+      wallet_address: walletAddress || null,
+      role: 'owner'
+    });
 
-    if (error) {
-      console.error('Registration error:', error);
+    if (!user) {
       return sendError(res, 500, 'Failed to create account');
     }
 
     // Generate token
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     await createAuditLog({ userId: user.id, action: 'USER_REGISTERED', details: { email: user.email } });
 
-    return sendSuccess(res, { user, token }, 201, 'Account created successfully');
+    const { password_hash, ...safeUser } = user;
+    return sendSuccess(res, { user: safeUser, token }, 201, 'Account created successfully');
   } catch (err) {
     console.error('Register error:', err);
-    return sendError(res, 500, 'Registration failed');
+    return sendError(res, 500, 'Registration failed: ' + (err.message || 'Server error'));
   }
 };
 
@@ -79,13 +72,8 @@ const login = async (req, res) => {
       return sendError(res, 400, 'Email and password are required');
     }
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email.toLowerCase().trim())
-      .single();
-
-    if (error || !user) {
+    const user = await db.users.findByEmail(email);
+    if (!user) {
       return sendError(res, 401, 'Invalid email or password');
     }
 
@@ -96,7 +84,7 @@ const login = async (req, res) => {
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -115,18 +103,13 @@ const updateWallet = async (req, res) => {
     const { walletAddress } = req.body;
     const userId = req.user.id;
 
-    const { data, error } = await supabase
-      .from('users')
-      .update({ wallet_address: walletAddress })
-      .eq('id', userId)
-      .select('id, name, email, role, wallet_address')
-      .single();
-
-    if (error) return sendError(res, 500, 'Failed to update wallet address');
+    const user = await db.users.updateWallet(userId, walletAddress);
+    if (!user) return sendError(res, 500, 'Failed to update wallet address');
 
     await createAuditLog({ userId, action: 'WALLET_CONNECTED', details: { wallet: walletAddress } });
 
-    return sendSuccess(res, { user: data }, 200, 'Wallet address updated');
+    const { password_hash, ...safeUser } = user;
+    return sendSuccess(res, { user: safeUser }, 200, 'Wallet address updated');
   } catch (err) {
     return sendError(res, 500, 'Failed to update wallet');
   }
