@@ -1,5 +1,6 @@
 const multer = require('multer');
 const { supabase } = require('../config/supabase');
+const { db } = require('../services/dbStore.service');
 const { sendSuccess, sendError } = require('../utils/response');
 const { encryptBuffer, generateHash } = require('../services/encryption.service');
 const { uploadToIPFS, retrieveFromIPFS, isPinataConfigured } = require('../services/ipfs.service');
@@ -52,10 +53,10 @@ const uploadAsset = async (req, res) => {
         return sendError(res, 503, `IPFS upload failed: ${ipfsErr.message}`);
       }
 
-      // Step 4: Create asset record in Supabase first (get UUID)
-      const { data: asset, error: assetError } = await supabase
-        .from('assets')
-        .insert({
+      // Step 4: Save asset record (Supabase or in-memory fallback)
+      let asset;
+      try {
+        asset = await db.assets.create({
           name: name.trim(),
           description: description?.trim() || '',
           owner_id: userId,
@@ -65,17 +66,18 @@ const uploadAsset = async (req, res) => {
           file_type: file.mimetype,
           encrypted_file_metadata: {
             iv,
-            key, // NOTE: In production, store key in a secure key management service
+            key,
             originalName: file.originalname,
             originalSize: file.size,
             mimeType: file.mimetype
           }
-        })
-        .select('*')
-        .single();
+        });
+      } catch (dbErr) {
+        console.error('Asset DB error:', dbErr);
+        return sendError(res, 500, 'Failed to save asset metadata: ' + dbErr.message);
+      }
 
-      if (assetError) {
-        console.error('Asset DB error:', assetError);
+      if (!asset) {
         return sendError(res, 500, 'Failed to save asset metadata');
       }
 
@@ -129,21 +131,7 @@ const getAssets = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    let query = supabase
-      .from('assets')
-      .select(`
-        *,
-        owner:users!assets_owner_id_fkey(id, name, email, wallet_address)
-      `)
-      .order('created_at', { ascending: false });
-
-    // Non-admins only see their own assets
-    if (userRole !== 'admin') {
-      query = query.eq('owner_id', userId);
-    }
-
-    const { data, error } = await query;
-    if (error) return sendError(res, 500, 'Failed to fetch assets');
+    const data = await db.assets.getAll(userId, userRole);
 
     // Remove sensitive encryption key from response
     const safeAssets = data.map(asset => ({
@@ -165,29 +153,22 @@ const getAssetById = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const { data: asset, error } = await supabase
-      .from('assets')
-      .select(`
-        *,
-        owner:users!assets_owner_id_fkey(id, name, email, wallet_address)
-      `)
-      .eq('id', id)
-      .single();
-
-    if (error || !asset) return sendError(res, 404, 'Asset not found');
+    const asset = await db.assets.getById(id);
+    if (!asset) return sendError(res, 404, 'Asset not found');
 
     // Access check: owner or admin
     if (userRole !== 'admin' && asset.owner_id !== userId) {
-      // Check permission
-      const { data: permission } = await supabase
-        .from('permissions')
-        .select('id, status')
-        .eq('asset_id', id)
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .single();
-
-      if (!permission) {
+      // Check permission via supabase (graceful fallback: allow if no supabase)
+      try {
+        const { data: permission } = await supabase
+          .from('permissions')
+          .select('id, status')
+          .eq('asset_id', id)
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .single();
+        if (!permission) return sendError(res, 403, 'Access denied. You do not have permission to view this asset.');
+      } catch (_) {
         return sendError(res, 403, 'Access denied. You do not have permission to view this asset.');
       }
     }
@@ -203,6 +184,7 @@ const getAssetById = async (req, res) => {
     return sendError(res, 500, 'Failed to fetch asset');
   }
 };
+
 
 const getSharedAssets = async (req, res) => {
   try {
