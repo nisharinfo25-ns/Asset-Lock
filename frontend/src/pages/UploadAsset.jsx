@@ -92,7 +92,7 @@ export default function UploadAsset() {
               ))}
             </div>
             <div className="flex gap-3 pt-2">
-              <Button variant="primary" onClick={() => navigate(`/app/assets/${result.asset?.id}`)}>View Asset</Button>
+              <Button variant="primary" onClick={() => navigate(`/assets/${result.asset?.id}`)}>View Asset</Button>
               <Button variant="secondary" onClick={() => { setResult(null); setFile(null); setName(''); setDescription(''); setStep(-1) }}>Upload Another</Button>
             </div>
           </CardBody>
