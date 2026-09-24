@@ -7,14 +7,14 @@ import { useAuth } from '../../hooks/useAuth'
 import { useWallet } from '../../hooks/useWallet'
 
 const navItems = [
-  { to: '/app/dashboard', icon: LayoutDashboard, label: 'Overview' },
-  { to: '/app/assets', icon: Files, label: 'My Assets' },
-  { to: '/app/shared', icon: Share2, label: 'Shared Assets' },
-  { to: '/app/requests', icon: InboxIcon, label: 'Access Requests' },
-  { to: '/app/audit', icon: ScrollText, label: 'Audit Logs' },
-  { to: '/app/integrity', icon: ShieldCheck, label: 'Integrity Verification' },
-  { to: '/app/wallet', icon: Wallet, label: 'Wallet' },
-  { to: '/app/profile', icon: User, label: 'Profile' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
+  { to: '/assets', icon: Files, label: 'My Assets' },
+  { to: '/shared', icon: Share2, label: 'Shared Assets' },
+  { to: '/requests', icon: InboxIcon, label: 'Access Requests' },
+  { to: '/audit', icon: ScrollText, label: 'Audit Logs' },
+  { to: '/integrity', icon: ShieldCheck, label: 'Integrity Verification' },
+  { to: '/wallet', icon: Wallet, label: 'Wallet' },
+  { to: '/profile', icon: User, label: 'Profile' },
 ]
 
 export default function Sidebar({ onClose }) {
@@ -61,7 +61,7 @@ export default function Sidebar({ onClose }) {
             <div className="pt-4 pb-2">
               <p className="px-3 text-xs font-medium text-surface-600 uppercase tracking-wider">Administration</p>
             </div>
-            <NavLink to="/app/admin" onClick={onClose} className={({ isActive }) => isActive ? 'nav-item-active' : 'nav-item'}>
+            <NavLink to="/admin" onClick={onClose} className={({ isActive }) => isActive ? 'nav-item-active' : 'nav-item'}>
               <Shield className="w-4 h-4 shrink-0" />
               <span>Admin Dashboard</span>
             </NavLink>

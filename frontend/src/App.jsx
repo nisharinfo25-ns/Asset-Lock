@@ -32,20 +32,39 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-      <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/app/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="assets" element={<MyAssets />} />
-        <Route path="assets/upload" element={<UploadAsset />} />
-        <Route path="assets/:id" element={<AssetDetail />} />
-        <Route path="shared" element={<SharedAssets />} />
-        <Route path="requests" element={<AccessRequests />} />
-        <Route path="audit" element={<AuditLogs />} />
-        <Route path="integrity" element={<IntegrityVerification />} />
-        <Route path="wallet" element={<WalletPage />} />
-        <Route path="profile" element={<ProfilePage />} />
-        <Route path="admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+      
+      {/* Protected Routes — App Layout */}
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/assets" element={<MyAssets />} />
+        <Route path="/assets/upload" element={<UploadAsset />} />
+        <Route path="/upload" element={<UploadAsset />} />
+        <Route path="/assets/:id" element={<AssetDetail />} />
+        <Route path="/shared" element={<SharedAssets />} />
+        <Route path="/requests" element={<AccessRequests />} />
+        <Route path="/audit" element={<AuditLogs />} />
+        <Route path="/integrity" element={<IntegrityVerification />} />
+        <Route path="/wallet" element={<WalletPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+        
+        {/* /app compatibility routes */}
+        <Route path="/app" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/app/dashboard" element={<Dashboard />} />
+        <Route path="/app/assets" element={<MyAssets />} />
+        <Route path="/app/assets/upload" element={<UploadAsset />} />
+        <Route path="/app/assets/:id" element={<AssetDetail />} />
+        <Route path="/app/shared" element={<SharedAssets />} />
+        <Route path="/app/requests" element={<AccessRequests />} />
+        <Route path="/app/audit" element={<AuditLogs />} />
+        <Route path="/app/integrity" element={<IntegrityVerification />} />
+        <Route path="/app/wallet" element={<WalletPage />} />
+        <Route path="/app/profile" element={<ProfilePage />} />
+        <Route path="/app/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
       </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
