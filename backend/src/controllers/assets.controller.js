@@ -89,16 +89,12 @@ const uploadAsset = async (req, res) => {
           blockchainResult = await registerOnChain(asset.id, fileHash, ipfsResult.cid);
           blockchainAssetId = asset.id;
 
-          // Update with blockchain tx hash
-          await supabase
-            .from('assets')
-            .update({ blockchain_asset_id: blockchainResult.transactionHash })
-            .eq('id', asset.id);
-
+          // Update with real blockchain tx hash
+          await db.assets.updateBlockchain(asset.id, blockchainResult.transactionHash);
           asset.blockchain_asset_id = blockchainResult.transactionHash;
         } catch (bcErr) {
-          console.error('Blockchain registration warning:', bcErr.message);
-          // Continue - blockchain is optional during development
+          console.error('Blockchain registration error:', bcErr.message);
+          throw new Error(`Blockchain registration failed: ${bcErr.message}`);
         }
       }
 

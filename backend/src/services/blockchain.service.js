@@ -80,4 +80,38 @@ const checkAccess = async (assetId, walletAddress) => {
   }
 };
 
-module.exports = { registerAsset, grantAccess, revokeAccess, verifyIntegrity, checkAccess, isBlockchainConfigured };
+const recordAccess = async (assetId, action) => {
+  const contract = getContract();
+  if (!contract) throw new Error('Blockchain not configured.');
+
+  try {
+    const tx = await contract.recordAccess(assetId, action);
+    const receipt = await tx.wait();
+    return { transactionHash: receipt.hash, blockNumber: receipt.blockNumber };
+  } catch (err) {
+    throw new Error(`Record access transaction failed: ${err.message}`);
+  }
+};
+
+const getAccessRecordCount = async (assetId) => {
+  const contract = getContract();
+  if (!contract) return 0;
+
+  try {
+    const count = await contract.getAccessRecordCount(assetId);
+    return Number(count);
+  } catch {
+    return 0;
+  }
+};
+
+module.exports = {
+  registerAsset,
+  grantAccess,
+  revokeAccess,
+  verifyIntegrity,
+  checkAccess,
+  recordAccess,
+  getAccessRecordCount,
+  isBlockchainConfigured
+};

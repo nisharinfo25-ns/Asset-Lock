@@ -53,7 +53,7 @@ function getContract() {
     const abi = getContractABI();
     
     if (process.env.DEPLOYER_PRIVATE_KEY) {
-      signer = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, p);
+      signer = new ethers.NonceManager(new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, p));
       contract = new ethers.Contract(contractAddress, abi, signer);
     } else {
       contract = new ethers.Contract(contractAddress, abi, p);

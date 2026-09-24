@@ -1,4 +1,4 @@
-﻿const crypto = require('crypto');
+const crypto = require('crypto');
 const { supabase, isSupabaseConfigured } = require('../config/supabase');
 
 // In-memory fallback store for local development when Supabase key is placeholder/missing
@@ -155,6 +155,25 @@ const db = {
         ...asset,
         owner: owner ? { id: owner.id, name: owner.name, email: owner.email } : null
       };
+    },
+    async updateBlockchain(id, blockchainTxHash) {
+      if (isSupabaseConfigured()) {
+        try {
+          const { data, error } = await supabase
+            .from('assets')
+            .update({ blockchain_asset_id: blockchainTxHash })
+            .eq('id', id)
+            .select()
+            .single();
+          if (!error && data) return data;
+        } catch (e) {}
+      }
+
+      const asset = inMemoryStore.assets.find(a => a.id === id);
+      if (asset) {
+        asset.blockchain_asset_id = blockchainTxHash;
+      }
+      return asset;
     }
   }
 };
