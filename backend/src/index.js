@@ -24,6 +24,24 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(generalLimiter);
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Asset-Lock API',
+    version: '1.0.0',
+    description: 'Blockchain Based Decentralised Identity & Access Control for Secure Digital Asset Management',
+    status: 'running',
+    healthCheck: '/health',
+    endpoints: {
+      auth: '/api/auth',
+      assets: '/api/assets',
+      accessRequests: '/api/access-requests',
+      users: '/api/users',
+      audit: '/api/audit'
+    }
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'Asset-Lock API' });
