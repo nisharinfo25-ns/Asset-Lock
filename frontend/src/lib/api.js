@@ -40,11 +40,12 @@ export const assetsAPI = {
   upload: (formData) => api.post('/assets/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }),
   getAll: () => api.get('/assets'),
   getById: (id) => api.get(`/assets/${id}`),
+  download: (id) => api.get(`/assets/${id}/download`, { responseType: 'blob' }),
   getShared: () => api.get('/assets/shared'),
   grantAccess: (id, userId) => api.post(`/assets/${id}/grant-access`, { userId }),
   revokeAccess: (id, userId) => api.post(`/assets/${id}/revoke-access`, { userId }),
   requestAccess: (id, message) => api.post(`/assets/${id}/request-access`, { message }),
-  verifyIntegrity: (id) => api.post(`/assets/${id}/verify-integrity`),
+  verifyIntegrity: (id, fileHash) => api.post(`/assets/${id}/verify-integrity`, fileHash ? { fileHash } : {}),
   getAuditLogs: (id) => api.get(`/assets/${id}/audit`),
 }
 

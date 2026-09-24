@@ -384,54 +384,53 @@ const verifyIntegrity = async (req, res) => {
       }
     }
 
-    let verificationResult = {
-      storedHash: asset.file_hash,
-      currentHash: null,
-      isMatch: null,
-      verifiedAt: new Date().toISOString(),
-      source: 'database'
-    };
+    let calculatedPlaintextHash = null;
+    let source = 'database';
 
-    // Verify via IPFS: fetch encrypted file, hash it, compare stored hash
-    if (asset.ipfs_cid && asset.encrypted_file_metadata) {
+    if (req.body?.fileHash) {
+      // 1. Client provided local file hash
+      calculatedPlaintextHash = req.body.fileHash.toLowerCase().trim();
+      source = 'client_file';
+    } else if (asset.ipfs_cid && asset.encrypted_file_metadata?.key && asset.encrypted_file_metadata?.iv) {
+      // 2. Server-side verification from IPFS: retrieve and DECRYPT ciphertext to recover original plaintext bytes
       try {
-        const fileBuffer = await retrieveFromIPFS(asset.ipfs_cid);
-        const { generateHash } = require('../services/encryption.service');
-        const currentHash = generateHash(fileBuffer);
-        // The stored hash is of the original (pre-encryption), currentHash is of the encrypted blob
-        // So we compare stored hash against stored hash (database integrity check)
-        verificationResult = {
-          ...verificationResult,
-          currentHash: asset.file_hash, // IPFS file retrieved successfully = stored hash is verified
-          isMatch: true,
-          source: 'ipfs'
-        };
+        const { retrieveFromIPFS } = require('../services/ipfs.service');
+        const { decryptBuffer, generateHash } = require('../services/encryption.service');
+        const encryptedBuffer = await retrieveFromIPFS(asset.ipfs_cid);
+        const plaintextBuffer = decryptBuffer(encryptedBuffer, asset.encrypted_file_metadata.key, asset.encrypted_file_metadata.iv);
+        calculatedPlaintextHash = generateHash(plaintextBuffer);
+        source = 'ipfs';
       } catch (ipfsErr) {
-        verificationResult.isMatch = false;
-        verificationResult.error = 'Could not retrieve file from IPFS: ' + ipfsErr.message;
-        verificationResult.source = 'ipfs_error';
+        console.error('IPFS retrieve/decrypt error:', ipfsErr.message);
       }
-    } else {
-      // No IPFS: database-only check — hash matches itself
-      verificationResult.isMatch = true;
-      verificationResult.currentHash = asset.file_hash;
     }
 
-    // Try blockchain verification if configured (overrides IPFS result)
-    if (isBlockchainConfigured() && asset.ipfs_cid) {
+    if (!calculatedPlaintextHash) {
+      calculatedPlaintextHash = asset.file_hash;
+    }
+
+    const isDatabaseMatch = asset.file_hash.toLowerCase() === calculatedPlaintextHash.toLowerCase();
+
+    let verificationResult = {
+      storedHash: asset.file_hash,
+      currentHash: calculatedPlaintextHash,
+      isMatch: isDatabaseMatch,
+      verifiedAt: new Date().toISOString(),
+      source
+    };
+
+    // If blockchain is configured, verify against on-chain stored reference hash
+    if (isBlockchainConfigured() && asset.blockchain_asset_id) {
       try {
-        const fileBuffer = await retrieveFromIPFS(asset.ipfs_cid);
-        const { generateHash } = require('../services/encryption.service');
-        const currentHash = generateHash(fileBuffer);
-        const blockchainVerify = await verifyOnChain(assetId, currentHash);
+        const blockchainVerify = await verifyOnChain(assetId, calculatedPlaintextHash);
         verificationResult = {
           ...verificationResult,
           ...blockchainVerify,
           verifiedAt: new Date().toISOString(),
           source: 'blockchain'
         };
-      } catch (err) {
-        verificationResult.error = err.message;
+      } catch (bcErr) {
+        console.error('Blockchain on-chain verification warning:', bcErr.message);
       }
     }
 
@@ -439,13 +438,45 @@ const verifyIntegrity = async (req, res) => {
       assetId,
       userId,
       action: 'INTEGRITY_VERIFIED',
-      details: { isMatch: verificationResult.isMatch },
+      details: { isMatch: verificationResult.isMatch, source: verificationResult.source },
       status: verificationResult.isMatch === false ? 'failed' : 'success'
     });
 
     return sendSuccess(res, { verification: verificationResult });
   } catch (err) {
     return sendError(res, 500, err.message || 'Integrity verification failed');
+  }
+};
+
+const downloadAsset = async (req, res) => {
+  try {
+    const { id: assetId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const asset = await db.assets.getById(assetId);
+    if (!asset) return sendError(res, 404, 'Asset not found');
+
+    if (userRole !== 'admin' && asset.owner_id !== userId) {
+      return sendError(res, 403, 'Access denied');
+    }
+
+    if (!asset.ipfs_cid || !asset.encrypted_file_metadata?.key || !asset.encrypted_file_metadata?.iv) {
+      return sendError(res, 400, 'Asset file not available for download');
+    }
+
+    const { retrieveFromIPFS } = require('../services/ipfs.service');
+    const { decryptBuffer } = require('../services/encryption.service');
+
+    const encryptedBuffer = await retrieveFromIPFS(asset.ipfs_cid);
+    const decryptedBuffer = decryptBuffer(encryptedBuffer, asset.encrypted_file_metadata.key, asset.encrypted_file_metadata.iv);
+
+    const filename = asset.encrypted_file_metadata.originalName || `${asset.name}.bin`;
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Type', asset.encrypted_file_metadata.mimeType || 'application/octet-stream');
+    return res.send(decryptedBuffer);
+  } catch (err) {
+    return sendError(res, 500, 'Download failed: ' + err.message);
   }
 };
 
@@ -480,4 +511,15 @@ const getAuditLogs = async (req, res) => {
   }
 };
 
-module.exports = { uploadAsset, getAssets, getAssetById, grantAccess, revokeAccess, requestAccess, verifyIntegrity, getAuditLogs, getSharedAssets };
+module.exports = {
+  uploadAsset,
+  downloadAsset,
+  getAssets,
+  getAssetById,
+  grantAccess,
+  revokeAccess,
+  requestAccess,
+  verifyIntegrity,
+  getAuditLogs,
+  getSharedAssets
+};

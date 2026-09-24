@@ -10,6 +10,7 @@ import {
   Copy,
   Check,
   Upload,
+  Download,
   FileCheck,
   FileX
 } from 'lucide-react'
@@ -133,6 +134,29 @@ export default function AssetDetail() {
     }
   }
 
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const res = await assetsAPI.download(id)
+      const blob = new Blob([res.data])
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', asset.encrypted_file_metadata?.originalName || `${asset.name}.bin`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Original file downloaded')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Download failed')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const handleRequestAccess = async () => {
     try {
       await assetsAPI.requestAccess(id, '')
@@ -157,6 +181,12 @@ export default function AssetDetail() {
           <p className="text-sm text-surface-500">{asset.description || 'No description provided'}</p>
         </div>
         <div className="flex gap-2">
+          {(isOwner || isAdmin) && asset.ipfs_cid && (
+            <Button variant="secondary" onClick={handleDownload} loading={downloading}>
+              <Download className="w-4 h-4 mr-1.5" />
+              Download Original
+            </Button>
+          )}
           {!isOwner && !isAdmin && (
             <Button variant="secondary" onClick={handleRequestAccess}>
               Request Access
