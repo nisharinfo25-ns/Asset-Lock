@@ -19,7 +19,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      if (typeof window !== 'undefined' && !['/login', '/register', '/'].includes(window.location.pathname)) {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }
@@ -28,6 +30,8 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  logout: () => api.post('/auth/logout'),
+  getMe: () => api.get('/auth/me'),
   getProfile: () => api.get('/auth/profile'),
   updateWallet: (walletAddress) => api.put('/auth/wallet', { walletAddress }),
 }

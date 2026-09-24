@@ -1,11 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config/jwt');
 const { db } = require('../services/dbStore.service');
 const { sendSuccess, sendError } = require('../utils/response');
 const { validateEmail, validatePassword } = require('../utils/validators');
 const { createAuditLog } = require('../services/audit.service');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'asset_lock_default_jwt_secret_key_32bytes_security_fallback';
 
 const register = async (req, res) => {
   try {
@@ -115,8 +114,19 @@ const updateWallet = async (req, res) => {
   }
 };
 
+const getMe = async (req, res) => {
+  return sendSuccess(res, { user: req.user });
+};
+
+const logout = async (req, res) => {
+  if (req.user) {
+    await createAuditLog({ userId: req.user.id, action: 'LOGOUT', details: { email: req.user.email } });
+  }
+  return sendSuccess(res, {}, 200, 'Logged out successfully');
+};
+
 const getProfile = async (req, res) => {
   return sendSuccess(res, { user: req.user });
 };
 
-module.exports = { register, login, updateWallet, getProfile };
+module.exports = { register, login, updateWallet, getProfile, getMe, logout };

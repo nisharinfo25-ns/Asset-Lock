@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
-const { supabase } = require('../config/supabase');
+const { JWT_SECRET } = require('../config/jwt');
+const { db } = require('../services/dbStore.service');
 const { sendError } = require('../utils/response');
 
 const authenticate = async (req, res, next) => {
@@ -10,20 +11,17 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
 
     // Verify user still exists
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, name, email, role, wallet_address')
-      .eq('id', decoded.userId)
-      .single();
+    const user = await db.users.findById(decoded.userId);
 
-    if (error || !user) {
+    if (!user) {
       return sendError(res, 401, 'Invalid authentication token');
     }
 
-    req.user = user;
+    const { password_hash, ...safeUser } = user;
+    req.user = safeUser;
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

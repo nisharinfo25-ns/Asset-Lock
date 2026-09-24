@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload, File, CheckCircle, AlertCircle } from 'lucide-react'
+import { Upload, File, CheckCircle, AlertCircle, ExternalLink, Settings } from 'lucide-react'
 import { assetsAPI } from '../lib/api'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -8,6 +8,9 @@ import { Card, CardBody } from '../components/ui/Card'
 import toast from 'react-hot-toast'
 
 const STEPS = ['Uploading', 'Encrypting', 'Hashing', 'Uploading to IPFS', 'Blockchain Register', 'Saving Metadata', 'Complete']
+
+const IPFS_ERROR_KEYWORDS = ['IPFS storage is not configured', 'PINATA_JWT', 'pinata', 'ipfs']
+const isIPFSConfigError = (msg) => IPFS_ERROR_KEYWORDS.some(k => msg?.toLowerCase().includes(k.toLowerCase()))
 
 export default function UploadAsset() {
   const [file, setFile] = useState(null)
@@ -106,10 +109,28 @@ export default function UploadAsset() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-danger shrink-0" />
-          <p className="text-sm text-danger">{error}</p>
-        </div>
+        isIPFSConfigError(error) ? (
+          <div className="p-4 bg-warning/10 border border-warning/30 rounded-lg space-y-2">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-warning shrink-0" />
+              <p className="text-sm font-semibold text-warning">IPFS Storage Not Configured</p>
+            </div>
+            <p className="text-xs text-warning/80">
+              Asset uploads require a Pinata API key for decentralized IPFS storage.
+            </p>
+            <ol className="text-xs text-surface-400 space-y-1 list-decimal list-inside">
+              <li>Go to <a href="https://app.pinata.cloud/keys" target="_blank" rel="noopener noreferrer" className="text-accent-400 underline inline-flex items-center gap-1">app.pinata.cloud/keys <ExternalLink className="w-3 h-3" /></a> and create a free API key</li>
+              <li>Open <code className="bg-surface-800 px-1 rounded">.env</code> in the project root</li>
+              <li>Set <code className="bg-surface-800 px-1 rounded">PINATA_JWT=&lt;your-jwt-token&gt;</code></li>
+              <li>Restart the server: <code className="bg-surface-800 px-1 rounded">npm run dev</code></li>
+            </ol>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+            <p className="text-sm text-danger">{error}</p>
+          </div>
+        )
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">

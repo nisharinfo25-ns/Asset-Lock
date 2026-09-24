@@ -10,14 +10,31 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user')
-    const token = localStorage.getItem('token')
-    if (storedUser && token) {
-      try {
-        setUser(JSON.parse(storedUser))
-      } catch {}
+    const initAuth = async () => {
+      const token = localStorage.getItem('token')
+      const storedUser = localStorage.getItem('user')
+
+      if (token) {
+        // Pre-fill from cache for fast UI feedback
+        if (storedUser) {
+          try { setUser(JSON.parse(storedUser)) } catch {}
+        }
+        // Verify with backend /api/auth/me
+        try {
+          const res = await authAPI.getMe()
+          const verifiedUser = res.data.data.user
+          localStorage.setItem('user', JSON.stringify(verifiedUser))
+          setUser(verifiedUser)
+        } catch (err) {
+          console.warn('Session verification failed:', err.message)
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          setUser(null)
+        }
+      }
+      setLoading(false)
     }
-    setLoading(false)
+    initAuth()
   }, [])
 
   const login = async (email, password) => {
@@ -38,7 +55,8 @@ export function AuthProvider({ children }) {
     return user
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try { await authAPI.logout() } catch {}
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     setUser(null)
