@@ -12,12 +12,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const demoAccounts = [
-    { label: 'Alice (Owner)', email: 'alice@security.enclave', pass: 'Password123!', role: 'Owner' },
-    { label: 'Bob (Authorized User)', email: 'bob@security.enclave', pass: 'Password123!', role: 'Authorized User' },
-    { label: 'Charlie (Authorized User)', email: 'charlie@security.enclave', pass: 'Password123!', role: 'Authorized User' },
-    { label: 'Admin', email: 'admin@security.enclave', pass: 'Password123!', role: 'Admin' },
-  ];
+
 
   const handleSelectDemo = (acc: { email: string; pass: string }) => {
     setEmail(acc.email);
@@ -96,26 +91,7 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* 1-Click Demo Personas */}
-        <div className="pt-2 border-t border-slate-800/80 space-y-2">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Select Demo Persona for Evaluation</span>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {demoAccounts.map((acc) => (
-              <button
-                key={acc.email}
-                type="button"
-                onClick={() => handleSelectDemo(acc)}
-                className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-xs transition-colors"
-              >
-                <div className="font-medium text-slate-200 truncate">{acc.label}</div>
-                <div className="text-[10px] text-emerald-400 font-mono">{acc.role}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+
 
         <div className="text-center text-xs text-slate-400">
           Don't have an account?{' '}
