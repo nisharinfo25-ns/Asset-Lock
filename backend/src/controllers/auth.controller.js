@@ -25,7 +25,7 @@ const register = async (req, res) => {
     }
 
     // Check duplicate
-    const existing = await db.users.findByEmail(email);
+    const existing = await db.users.findByEmailOrIdentifier(email);
     if (existing) {
       return sendError(res, 409, 'An account with this email already exists');
     }
@@ -33,13 +33,15 @@ const register = async (req, res) => {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Create user
+    // Create user: Public registration ALWAYS creates role: 'USER'
+    // Ignore/reject any client request attempting role=ADMIN
     const user = await db.users.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       password_hash: passwordHash,
       wallet_address: walletAddress || null,
-      role: 'owner'
+      role: 'USER',
+      isInternalAdmin: false
     });
 
     if (!user) {
@@ -65,20 +67,21 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const identifier = (req.body.email || req.body.username || '').trim();
+    const { password } = req.body;
 
-    if (!email || !password) {
-      return sendError(res, 400, 'Email and password are required');
+    if (!identifier || !password) {
+      return sendError(res, 400, 'Email/Username and password are required');
     }
 
-    const user = await db.users.findByEmail(email);
+    const user = await db.users.findByEmailOrIdentifier(identifier);
     if (!user) {
-      return sendError(res, 401, 'Invalid email or password');
+      return sendError(res, 401, 'Invalid credentials');
     }
 
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
-      return sendError(res, 401, 'Invalid email or password');
+      return sendError(res, 401, 'Invalid credentials');
     }
 
     const token = jwt.sign(
@@ -87,7 +90,7 @@ const login = async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    await createAuditLog({ userId: user.id, action: 'USER_LOGIN', details: { email: user.email } });
+    await createAuditLog({ userId: user.id, action: 'USER_LOGIN', details: { email: user.email, role: user.role } });
 
     const { password_hash, ...safeUser } = user;
     return sendSuccess(res, { user: safeUser, token }, 200, 'Login successful');

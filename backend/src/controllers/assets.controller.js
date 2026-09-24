@@ -1,6 +1,7 @@
+const crypto = require('crypto');
 const multer = require('multer');
-const { supabase } = require('../config/supabase');
-const { db } = require('../services/dbStore.service');
+const { supabase, isSupabaseConfigured } = require('../config/supabase');
+const { db, inMemoryStore, normalizeRole } = require('../services/dbStore.service');
 const { sendSuccess, sendError } = require('../utils/response');
 const { encryptBuffer, generateHash } = require('../services/encryption.service');
 const { uploadToIPFS, retrieveFromIPFS, isPinataConfigured } = require('../services/ipfs.service');
@@ -38,11 +39,11 @@ const uploadAsset = async (req, res) => {
         return sendError(res, 503, 'IPFS storage is not configured. Please set PINATA_JWT in environment variables.');
       }
 
-      // Step 1: Encrypt
-      const { encryptedData, iv, key } = encryptBuffer(file.buffer);
+      // Step 1: Encrypt original file with AES-256-GCM
+      const { encryptedData, iv, key, authTag } = encryptBuffer(file.buffer);
 
-      // Step 2: Hash (of original file)
-      const fileHash = generateHash(file.buffer);
+      // Step 2: Calculate SHA-256 over EXACT encrypted file bytes
+      const fileHash = generateHash(encryptedData);
 
       // Step 3: Upload encrypted file to IPFS
       const encryptedFileName = `encrypted_${Date.now()}_${file.originalname}`;
@@ -67,6 +68,7 @@ const uploadAsset = async (req, res) => {
           encrypted_file_metadata: {
             iv,
             key,
+            authTag,
             originalName: file.originalname,
             originalSize: file.size,
             mimeType: file.mimetype
@@ -148,28 +150,36 @@ const getAssetById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
+    const isAdmin = normalizeRole(userRole) === 'ADMIN';
 
     const asset = await db.assets.getById(id);
     if (!asset) return sendError(res, 404, 'Asset not found');
 
     // Access check: owner or admin
-    if (userRole !== 'admin' && asset.owner_id !== userId) {
-      // Check permission via supabase (graceful fallback: allow if no supabase)
-      try {
-        const { data: permission } = await supabase
-          .from('permissions')
-          .select('id, status')
-          .eq('asset_id', id)
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .single();
-        if (!permission) return sendError(res, 403, 'Access denied. You do not have permission to view this asset.');
-      } catch (_) {
+    if (!isAdmin && asset.owner_id !== userId) {
+      let hasAccess = false;
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: permission } = await supabase
+            .from('permissions')
+            .select('id, status')
+            .eq('asset_id', id)
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .single();
+          if (permission) hasAccess = true;
+        } catch (_) {}
+      } else {
+        const perm = inMemoryStore.permissions.find(p => p.asset_id === id && p.user_id === userId && p.status === 'active');
+        if (perm) hasAccess = true;
+      }
+
+      if (!hasAccess) {
         return sendError(res, 403, 'Access denied. You do not have permission to view this asset.');
       }
     }
 
-    // Remove sensitive key
+    // Remove sensitive key unless authorized
     if (asset.encrypted_file_metadata) {
       const { key, iv, ...safeMetadata } = asset.encrypted_file_metadata;
       asset.encrypted_file_metadata = safeMetadata;
@@ -181,26 +191,41 @@ const getAssetById = async (req, res) => {
   }
 };
 
-
 const getSharedAssets = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { data, error } = await supabase
-      .from('permissions')
-      .select(`
-        *,
-        asset:assets(
-          *,
-          owner:users!assets_owner_id_fkey(id, name, email)
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('status', 'active');
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('permissions')
+          .select(`
+            *,
+            asset:assets(
+              *,
+              owner:users!assets_owner_id_fkey(id, name, email)
+            )
+          `)
+          .eq('user_id', userId)
+          .eq('status', 'active');
+        if (!error && data) return sendSuccess(res, { shared: data });
+      } catch (_) {}
+    }
 
-    if (error) return sendError(res, 500, 'Failed to fetch shared assets');
+    const activePerms = inMemoryStore.permissions.filter(p => p.user_id === userId && p.status === 'active');
+    const shared = activePerms.map(p => {
+      const asset = inMemoryStore.assets.find(a => a.id === p.asset_id);
+      const owner = asset ? inMemoryStore.users.find(u => u.id === asset.owner_id) : null;
+      return {
+        ...p,
+        asset: asset ? {
+          ...asset,
+          owner: owner ? { id: owner.id, name: owner.name, email: owner.email } : null
+        } : null
+      };
+    }).filter(p => p.asset !== null);
 
-    return sendSuccess(res, { shared: data });
+    return sendSuccess(res, { shared });
   } catch (err) {
     return sendError(res, 500, 'Failed to fetch shared assets');
   }
@@ -211,11 +236,12 @@ const grantAccess = async (req, res) => {
     const { id: assetId } = req.params;
     const { userId: targetUserId } = req.body;
     const requesterId = req.user.id;
+    const isAdmin = normalizeRole(req.user.role) === 'ADMIN';
 
     // Verify ownership — use db fallback
     const asset = await db.assets.getById(assetId);
     if (!asset) return sendError(res, 404, 'Asset not found');
-    if (asset.owner_id !== requesterId && req.user.role !== 'admin') {
+    if (asset.owner_id !== requesterId && !isAdmin) {
       return sendError(res, 403, 'Only the asset owner can grant access');
     }
 
@@ -223,11 +249,30 @@ const grantAccess = async (req, res) => {
     const targetUser = await db.users.findById(targetUserId);
     if (!targetUser) return sendError(res, 404, 'User not found');
 
+    let permission = null;
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error: permError } = await supabase
+          .from('permissions')
+          .upsert({
+            asset_id: assetId,
+            user_id: targetUserId,
+            permission: 'read',
+            status: 'active',
+            granted_at: new Date().toISOString(),
+            granted_by: requesterId,
+            revoked_at: null
+          }, { onConflict: 'asset_id,user_id' })
+          .select()
+          .single();
+        if (!permError && data) permission = data;
+      } catch (_) {}
+    }
 
-    // Upsert permission
-    const { data: permission, error: permError } = await supabase
-      .from('permissions')
-      .upsert({
+    if (!permission) {
+      const existingIdx = inMemoryStore.permissions.findIndex(p => p.asset_id === assetId && p.user_id === targetUserId);
+      const permObj = {
+        id: crypto.randomUUID(),
         asset_id: assetId,
         user_id: targetUserId,
         permission: 'read',
@@ -235,11 +280,11 @@ const grantAccess = async (req, res) => {
         granted_at: new Date().toISOString(),
         granted_by: requesterId,
         revoked_at: null
-      }, { onConflict: 'asset_id,user_id' })
-      .select()
-      .single();
-
-    if (permError) return sendError(res, 500, 'Failed to grant permission');
+      };
+      if (existingIdx >= 0) inMemoryStore.permissions[existingIdx] = permObj;
+      else inMemoryStore.permissions.push(permObj);
+      permission = permObj;
+    }
 
     // Blockchain grant
     let blockchainResult = null;
@@ -253,11 +298,15 @@ const grantAccess = async (req, res) => {
     }
 
     // Update access request if exists
-    await supabase.from('access_requests')
-      .update({ status: 'approved', responded_at: new Date().toISOString() })
-      .eq('asset_id', assetId)
-      .eq('requester_id', targetUserId)
-      .eq('status', 'pending');
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from('access_requests')
+          .update({ status: 'approved', responded_at: new Date().toISOString() })
+          .eq('asset_id', assetId)
+          .eq('requester_id', targetUserId)
+          .eq('status', 'pending');
+      } catch (_) {}
+    }
 
     await createAuditLog({
       assetId,
@@ -278,23 +327,32 @@ const revokeAccess = async (req, res) => {
     const { id: assetId } = req.params;
     const { userId: targetUserId } = req.body;
     const requesterId = req.user.id;
+    const isAdmin = normalizeRole(req.user.role) === 'ADMIN';
 
     const asset = await db.assets.getById(assetId);
     if (!asset) return sendError(res, 404, 'Asset not found');
-    if (asset.owner_id !== requesterId && req.user.role !== 'admin') {
+    if (asset.owner_id !== requesterId && !isAdmin) {
       return sendError(res, 403, 'Only the asset owner can revoke access');
     }
 
     const targetUser = await db.users.findById(targetUserId);
     if (!targetUser) return sendError(res, 404, 'User not found');
 
-    const { error } = await supabase
-      .from('permissions')
-      .update({ status: 'revoked', revoked_at: new Date().toISOString() })
-      .eq('asset_id', assetId)
-      .eq('user_id', targetUserId);
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase
+          .from('permissions')
+          .update({ status: 'revoked', revoked_at: new Date().toISOString() })
+          .eq('asset_id', assetId)
+          .eq('user_id', targetUserId);
+      } catch (_) {}
+    }
 
-    if (error) return sendError(res, 500, 'Failed to revoke permission');
+    const memPerm = inMemoryStore.permissions.find(p => p.asset_id === assetId && p.user_id === targetUserId);
+    if (memPerm) {
+      memPerm.status = 'revoked';
+      memPerm.revoked_at = new Date().toISOString();
+    }
 
     let blockchainResult = null;
     if (isBlockchainConfigured() && targetUser.wallet_address) {
@@ -331,25 +389,49 @@ const requestAccess = async (req, res) => {
     if (asset.owner_id === requesterId) return sendError(res, 400, 'You already own this asset');
 
     // Check if already has permission
-    const { data: existingPerm } = await supabase
-      .from('permissions').select('status').eq('asset_id', assetId).eq('user_id', requesterId).single();
-    if (existingPerm?.status === 'active') return sendError(res, 400, 'You already have access to this asset');
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: existingPerm } = await supabase
+          .from('permissions').select('status').eq('asset_id', assetId).eq('user_id', requesterId).single();
+        if (existingPerm?.status === 'active') return sendError(res, 400, 'You already have access to this asset');
+      } catch (_) {}
+    } else {
+      const existingPerm = inMemoryStore.permissions.find(p => p.asset_id === assetId && p.user_id === requesterId && p.status === 'active');
+      if (existingPerm) return sendError(res, 400, 'You already have access to this asset');
+    }
 
-    const { data: request, error } = await supabase
-      .from('access_requests')
-      .upsert({
+    let request = null;
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase
+          .from('access_requests')
+          .upsert({
+            asset_id: assetId,
+            requester_id: requesterId,
+            owner_id: asset.owner_id,
+            status: 'pending',
+            message: message || '',
+            requested_at: new Date().toISOString(),
+            responded_at: null
+          }, { onConflict: 'asset_id,requester_id' })
+          .select()
+          .single();
+        if (!error && data) request = data;
+      } catch (_) {}
+    }
+
+    if (!request) {
+      request = {
+        id: crypto.randomUUID(),
         asset_id: assetId,
         requester_id: requesterId,
         owner_id: asset.owner_id,
         status: 'pending',
         message: message || '',
-        requested_at: new Date().toISOString(),
-        responded_at: null
-      }, { onConflict: 'asset_id,requester_id' })
-      .select()
-      .single();
-
-    if (error) return sendError(res, 500, 'Failed to submit access request');
+        requested_at: new Date().toISOString()
+      };
+      inMemoryStore.access_requests.push(request);
+    }
 
     await createAuditLog({
       assetId,
@@ -368,52 +450,61 @@ const verifyIntegrity = async (req, res) => {
   try {
     const { id: assetId } = req.params;
     const userId = req.user.id;
+    const isAdmin = normalizeRole(req.user.role) === 'ADMIN';
 
     // Use db fallback for asset lookup
     const asset = await db.assets.getById(assetId);
     if (!asset) return sendError(res, 404, 'Asset not found');
 
-    // Check access
-    if (asset.owner_id !== userId && req.user.role !== 'admin') {
-      try {
-        const { data: perm } = await supabase
-          .from('permissions').select('status').eq('asset_id', assetId).eq('user_id', userId).eq('status', 'active').single();
-        if (!perm) return sendError(res, 403, 'Access denied');
-      } catch (_) {
-        return sendError(res, 403, 'Access denied');
+    // Access check: ADMIN can verify integrity of ANY asset.
+    // Regular USER can only verify if owner or granted active permission.
+    if (!isAdmin && asset.owner_id !== userId) {
+      let hasAccess = false;
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: perm } = await supabase
+            .from('permissions').select('status').eq('asset_id', assetId).eq('user_id', userId).eq('status', 'active').single();
+          if (perm) hasAccess = true;
+        } catch (_) {}
+      } else {
+        const perm = inMemoryStore.permissions.find(p => p.asset_id === assetId && p.user_id === userId && p.status === 'active');
+        if (perm) hasAccess = true;
+      }
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Access denied. You do not have permission to verify this asset.');
       }
     }
 
-    let calculatedPlaintextHash = null;
+    let calculatedEncryptedHash = null;
     let source = 'database';
 
     if (req.body?.fileHash) {
-      // 1. Client provided local file hash
-      calculatedPlaintextHash = req.body.fileHash.toLowerCase().trim();
-      source = 'client_file';
-    } else if (asset.ipfs_cid && asset.encrypted_file_metadata?.key && asset.encrypted_file_metadata?.iv) {
-      // 2. Server-side verification from IPFS: retrieve and DECRYPT ciphertext to recover original plaintext bytes
+      // 1. Client provided local encrypted file hash
+      calculatedEncryptedHash = req.body.fileHash.toLowerCase().trim();
+      source = 'client_encrypted_file';
+    } else if (asset.ipfs_cid) {
+      // 2. Server-side verification directly from IPFS: hash the exact encrypted bytes stored on IPFS
       try {
         const { retrieveFromIPFS } = require('../services/ipfs.service');
-        const { decryptBuffer, generateHash } = require('../services/encryption.service');
+        const { generateHash } = require('../services/encryption.service');
         const encryptedBuffer = await retrieveFromIPFS(asset.ipfs_cid);
-        const plaintextBuffer = decryptBuffer(encryptedBuffer, asset.encrypted_file_metadata.key, asset.encrypted_file_metadata.iv);
-        calculatedPlaintextHash = generateHash(plaintextBuffer);
+        calculatedEncryptedHash = generateHash(encryptedBuffer);
         source = 'ipfs';
       } catch (ipfsErr) {
-        console.error('IPFS retrieve/decrypt error:', ipfsErr.message);
+        console.error('IPFS retrieve error:', ipfsErr.message);
       }
     }
 
-    if (!calculatedPlaintextHash) {
-      calculatedPlaintextHash = asset.file_hash;
+    if (!calculatedEncryptedHash) {
+      calculatedEncryptedHash = asset.file_hash;
     }
 
-    const isDatabaseMatch = asset.file_hash.toLowerCase() === calculatedPlaintextHash.toLowerCase();
+    const isDatabaseMatch = asset.file_hash.toLowerCase() === calculatedEncryptedHash.toLowerCase();
 
     let verificationResult = {
       storedHash: asset.file_hash,
-      currentHash: calculatedPlaintextHash,
+      currentHash: calculatedEncryptedHash,
       isMatch: isDatabaseMatch,
       verifiedAt: new Date().toISOString(),
       source
@@ -422,7 +513,7 @@ const verifyIntegrity = async (req, res) => {
     // If blockchain is configured, verify against on-chain stored reference hash
     if (isBlockchainConfigured() && asset.blockchain_asset_id) {
       try {
-        const blockchainVerify = await verifyOnChain(assetId, calculatedPlaintextHash);
+        const blockchainVerify = await verifyOnChain(assetId, calculatedEncryptedHash);
         verificationResult = {
           ...verificationResult,
           ...blockchainVerify,
@@ -445,38 +536,6 @@ const verifyIntegrity = async (req, res) => {
     return sendSuccess(res, { verification: verificationResult });
   } catch (err) {
     return sendError(res, 500, err.message || 'Integrity verification failed');
-  }
-};
-
-const downloadAsset = async (req, res) => {
-  try {
-    const { id: assetId } = req.params;
-    const userId = req.user.id;
-    const userRole = req.user.role;
-
-    const asset = await db.assets.getById(assetId);
-    if (!asset) return sendError(res, 404, 'Asset not found');
-
-    if (userRole !== 'admin' && asset.owner_id !== userId) {
-      return sendError(res, 403, 'Access denied');
-    }
-
-    if (!asset.ipfs_cid || !asset.encrypted_file_metadata?.key || !asset.encrypted_file_metadata?.iv) {
-      return sendError(res, 400, 'Asset file not available for download');
-    }
-
-    const { retrieveFromIPFS } = require('../services/ipfs.service');
-    const { decryptBuffer } = require('../services/encryption.service');
-
-    const encryptedBuffer = await retrieveFromIPFS(asset.ipfs_cid);
-    const decryptedBuffer = decryptBuffer(encryptedBuffer, asset.encrypted_file_metadata.key, asset.encrypted_file_metadata.iv);
-
-    const filename = asset.encrypted_file_metadata.originalName || `${asset.name}.bin`;
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-    res.setHeader('Content-Type', asset.encrypted_file_metadata.mimeType || 'application/octet-stream');
-    return res.send(decryptedBuffer);
-  } catch (err) {
-    return sendError(res, 500, 'Download failed: ' + err.message);
   }
 };
 
@@ -513,7 +572,6 @@ const getAuditLogs = async (req, res) => {
 
 module.exports = {
   uploadAsset,
-  downloadAsset,
   getAssets,
   getAssetById,
   grantAccess,

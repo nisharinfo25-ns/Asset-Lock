@@ -1,15 +1,10 @@
-const { supabase } = require('../config/supabase');
+const { db } = require('../services/dbStore.service');
 const { sendSuccess, sendError } = require('../utils/response');
 
 const getUsers = async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, name, email, role, wallet_address, created_at')
-      .order('created_at', { ascending: false });
-
-    if (error) return sendError(res, 500, 'Failed to fetch users');
-    return sendSuccess(res, { users: data });
+    const users = await db.users.getAll();
+    return sendSuccess(res, { users });
   } catch (err) {
     return sendError(res, 500, 'Failed to fetch users');
   }
@@ -20,20 +15,17 @@ const updateUserRole = async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
-    const validRoles = ['admin', 'owner', 'authorized_user', 'viewer'];
-    if (!validRoles.includes(role)) {
-      return sendError(res, 400, 'Invalid role');
+    const roleUpper = role ? String(role).toUpperCase().trim() : '';
+    const validRoles = ['ADMIN', 'USER'];
+    if (!validRoles.includes(roleUpper)) {
+      return sendError(res, 400, 'Invalid role. Only ADMIN and USER are allowed.');
     }
 
-    const { data, error } = await supabase
-      .from('users')
-      .update({ role })
-      .eq('id', id)
-      .select('id, name, email, role')
-      .single();
+    const updatedUser = await db.users.updateRole(id, roleUpper);
+    if (!updatedUser) return sendError(res, 404, 'User not found');
 
-    if (error) return sendError(res, 500, 'Failed to update role');
-    return sendSuccess(res, { user: data }, 200, 'Role updated successfully');
+    const { password_hash, ...safeUser } = updatedUser;
+    return sendSuccess(res, { user: safeUser }, 200, 'Role updated successfully');
   } catch (err) {
     return sendError(res, 500, 'Failed to update role');
   }

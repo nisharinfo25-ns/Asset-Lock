@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { authenticate } = require('../middleware/auth');
 const {
-  uploadAsset, downloadAsset, getAssets, getAssetById, grantAccess, revokeAccess,
+  uploadAsset, getAssets, getAssetById, grantAccess, revokeAccess,
   requestAccess, verifyIntegrity, getAuditLogs, getSharedAssets
 } = require('../controllers/assets.controller');
 
@@ -10,7 +10,6 @@ router.get('/shared', getSharedAssets);
 router.post('/upload', uploadAsset);
 router.get('/', getAssets);
 router.get('/:id', getAssetById);
-router.get('/:id/download', downloadAsset);
 router.post('/:id/request-access', requestAccess);
 router.post('/:id/grant-access', grantAccess);
 router.post('/:id/revoke-access', revokeAccess);

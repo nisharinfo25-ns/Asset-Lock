@@ -17,14 +17,18 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrors({})
-    if (!form.email) return setErrors({ email: 'Email is required' })
+    if (!form.email) return setErrors({ email: 'Username or email is required' })
     if (!form.password) return setErrors({ password: 'Password is required' })
 
     setLoading(true)
     try {
-      await login(form.email, form.password)
+      const loggedUser = await login(form.email, form.password)
       toast.success('Welcome back!')
-      navigate('/app/dashboard')
+      if (loggedUser?.role?.toUpperCase() === 'ADMIN') {
+        navigate('/app/admin')
+      } else {
+        navigate('/app/dashboard')
+      }
     } catch (err) {
       const msg = err.response?.data?.error || 'Login failed'
       toast.error(msg)
@@ -78,7 +82,7 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Email" type="email" placeholder="you@company.com" value={form.email}
+            <Input label="Username or Email" type="text" placeholder="Nexshield@Admin or user@company.com" value={form.email}
               onChange={e => setForm(p => ({ ...p, email: e.target.value }))} error={errors.email} />
             <div className="space-y-1">
               <label className="block text-xs font-medium text-surface-400 uppercase tracking-wider">Password</label>

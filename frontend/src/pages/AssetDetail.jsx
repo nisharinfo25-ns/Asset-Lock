@@ -10,7 +10,6 @@ import {
   Copy,
   Check,
   Upload,
-  Download,
   FileCheck,
   FileX
 } from 'lucide-react'
@@ -68,7 +67,7 @@ export default function AssetDetail() {
 
   const handleVerifyIntegrity = async () => {
     if (!selectedFile) {
-      toast.error('Please select a file to verify')
+      toast.error('Please select an encrypted file to verify')
       return
     }
 
@@ -76,48 +75,48 @@ export default function AssetDetail() {
       setVerifyResult({
         status: 'FAILED',
         isMatch: false,
-        message: 'Asset has no registered reference SHA-256 hash.',
-        registeredHash: 'Not available',
+        message: 'Asset has no stored encrypted-file hash reference.',
+        storedHash: 'Not available',
         currentHash: '—'
       })
-      toast.error('Asset has no registered reference hash')
+      toast.error('Asset has no stored encrypted-file hash')
       return
     }
 
     setVerifying(true)
     try {
-      // 1. Read the selected file bytes directly in the client browser
+      // 1. Read the selected encrypted file bytes directly in the client browser
       const arrayBuffer = await selectedFile.arrayBuffer()
 
-      // 2. Calculate exact SHA-256 hash of the selected file bytes using Web Crypto API
+      // 2. Calculate exact SHA-256 hash of the selected encrypted file bytes using Web Crypto API
       const hashBuffer = await window.crypto.subtle.digest('SHA-256', arrayBuffer)
       const hashArray = Array.from(new Uint8Array(hashBuffer))
       const currentHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase()
-      const registeredHash = asset.file_hash.trim().toLowerCase()
+      const storedHash = asset.file_hash.trim().toLowerCase()
 
-      // 3. Compare with the original registered reference hash
-      const isMatch = currentHash === registeredHash
+      // 3. Compare with the stored encrypted-file reference hash
+      const isMatch = currentHash === storedHash
 
       if (isMatch) {
         setVerifyResult({
           status: 'VERIFIED',
           isMatch: true,
-          message: 'The selected file matches the original registered asset.',
-          registeredHash: asset.file_hash,
+          message: 'The selected encrypted file matches the stored encrypted asset.',
+          storedHash: asset.file_hash,
           currentHash,
           verifiedAt: new Date().toISOString()
         })
-        toast.success('Integrity Verified: File matches registered asset')
+        toast.success('Integrity Verified: Encrypted file matches stored hash')
       } else {
         setVerifyResult({
           status: 'TAMPER_DETECTED',
           isMatch: false,
-          message: 'The selected file does not match the original registered asset.',
-          registeredHash: asset.file_hash,
+          message: 'The selected encrypted file does not match the stored encrypted asset.',
+          storedHash: asset.file_hash,
           currentHash,
           verifiedAt: new Date().toISOString()
         })
-        toast.error('Tamper Detected: Hashes do not match')
+        toast.error('Tamper Detected: Encrypted file hash does not match')
       }
     } catch (err) {
       console.error('Integrity hash calculation error:', err)
@@ -125,35 +124,12 @@ export default function AssetDetail() {
         status: 'FAILED',
         isMatch: false,
         message: 'Failed to calculate file hash: ' + (err.message || 'Unknown error'),
-        registeredHash: asset.file_hash || 'N/A',
+        storedHash: asset.file_hash || 'N/A',
         currentHash: '—'
       })
       toast.error('Failed to calculate file hash')
     } finally {
       setVerifying(false)
-    }
-  }
-
-  const [downloading, setDownloading] = useState(false)
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    try {
-      const res = await assetsAPI.download(id)
-      const blob = new Blob([res.data])
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', asset.encrypted_file_metadata?.originalName || `${asset.name}.bin`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      toast.success('Original file downloaded')
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Download failed')
-    } finally {
-      setDownloading(false)
     }
   }
 
@@ -181,12 +157,6 @@ export default function AssetDetail() {
           <p className="text-sm text-surface-500">{asset.description || 'No description provided'}</p>
         </div>
         <div className="flex gap-2">
-          {(isOwner || isAdmin) && asset.ipfs_cid && (
-            <Button variant="secondary" onClick={handleDownload} loading={downloading}>
-              <Download className="w-4 h-4 mr-1.5" />
-              Download Original
-            </Button>
-          )}
           {!isOwner && !isAdmin && (
             <Button variant="secondary" onClick={handleRequestAccess}>
               Request Access
@@ -219,7 +189,7 @@ export default function AssetDetail() {
             </div>
 
             <div className="sm:col-span-2">
-              <p className="text-xs text-surface-500 mb-0.5">Original / Registered SHA-256 Hash</p>
+              <p className="text-xs text-surface-500 mb-0.5">Stored Encrypted File Hash</p>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-mono text-accent-400 break-all select-all">
                   {asset.file_hash}
@@ -261,7 +231,7 @@ export default function AssetDetail() {
           {/* File Picker & Action */}
           <div className="space-y-2">
             <label className="block text-xs font-medium text-surface-300">
-              Select File to Verify
+              Select Encrypted File to Verify
             </label>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <input
@@ -286,7 +256,7 @@ export default function AssetDetail() {
                     {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
                   </span>
                 ) : (
-                  <span className="text-surface-500 italic">No file selected. Choose a local file to compare with the registered hash.</span>
+                  <span className="text-surface-500 italic">No file selected. Choose the encrypted file to compare with the stored hash.</span>
                 )}
               </div>
 
@@ -303,7 +273,7 @@ export default function AssetDetail() {
               </Button>
             </div>
             <p className="text-[11px] text-surface-500">
-              File stays 100% local in your browser. Exact bytes are hashed with SHA-256 and compared to the registered reference.
+              File stays 100% local in your browser. Select the encrypted file (.bin) — its SHA-256 is compared to the stored encrypted-file hash.
             </p>
           </div>
 
@@ -376,12 +346,12 @@ export default function AssetDetail() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-3 bg-surface-950/80 rounded-lg border border-surface-800/80">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-surface-400">Registered Hash:</span>
+                    <span className="text-xs font-medium text-surface-400">Stored Encrypted Hash:</span>
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(verifyResult.registeredHash, 'res_reg_hash')}
+                      onClick={() => copyToClipboard(verifyResult.storedHash, 'res_reg_hash')}
                       className="p-1 text-surface-400 hover:text-surface-200"
-                      title="Copy registered hash"
+                      title="Copy stored hash"
                     >
                       {copiedField === 'res_reg_hash' ? (
                         <Check className="w-3.5 h-3.5 text-success" />
@@ -391,7 +361,7 @@ export default function AssetDetail() {
                     </button>
                   </div>
                   <p className="text-xs font-mono text-surface-200 break-all select-all">
-                    {verifyResult.registeredHash}
+                    {verifyResult.storedHash}
                   </p>
                 </div>
 

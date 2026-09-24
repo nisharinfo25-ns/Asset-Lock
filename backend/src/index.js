@@ -28,9 +28,11 @@ const fs = require('fs');
 const path = require('path');
 
 // Health check
-app.get('/health', (req, res) => {
+const healthCheckHandler = (req, res) => {
   res.json({ success: true, service: 'Asset-Lock API', status: 'healthy', timestamp: new Date().toISOString() });
-});
+};
+app.get('/health', healthCheckHandler);
+app.get('/api/health', healthCheckHandler);
 
 // API Routes
 app.use('/api/auth', authRoutes);

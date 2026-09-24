@@ -56,7 +56,7 @@ export default function Sidebar({ onClose }) {
           </NavLink>
         ))}
 
-        {user?.role === 'admin' && (
+        {user?.role?.toUpperCase() === 'ADMIN' && (
           <>
             <div className="pt-4 pb-2">
               <p className="px-3 text-xs font-medium text-surface-600 uppercase tracking-wider">Administration</p>

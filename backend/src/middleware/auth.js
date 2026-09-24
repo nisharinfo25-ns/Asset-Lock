@@ -32,7 +32,7 @@ const authenticate = async (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== 'admin') {
+  if (req.user?.role?.toUpperCase() !== 'ADMIN') {
     return sendError(res, 403, 'Admin access required');
   }
   next();

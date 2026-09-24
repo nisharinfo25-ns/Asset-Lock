@@ -56,12 +56,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-surface-900 border border-surface-800 rounded-xl">
         <div>
-          <h2 className="text-lg font-semibold text-surface-100">Welcome back, {user?.name?.split(' ')[0]}</h2>
-          <p className="text-sm text-surface-500">Here's your security overview</p>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-xl font-bold text-surface-100">{user?.name}</h2>
+            <Badge variant="neutral" className="font-mono text-xs">ROLE: USER</Badge>
+          </div>
+          <p className="text-xs text-surface-400">
+            {user?.email} · Manage your encrypted digital assets with decentralized access control
+          </p>
         </div>
-        <Link to="/app/assets/upload" className="btn-primary flex items-center gap-2">
+        <Link to="/app/assets/upload" className="btn-primary flex items-center gap-2 self-start sm:self-auto">
           <Upload className="w-4 h-4" /> Upload Asset
         </Link>
       </div>
